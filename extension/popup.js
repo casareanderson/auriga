@@ -12,13 +12,47 @@ async function refresh() {
   }
 }
 
+function appendLine(text, who) {
+  const t = $("transcript");
+  t.value += (who === "you" ? "> " : "") + text + "\n\n";
+  t.scrollTop = t.scrollHeight;
+}
+
+$("send").onclick = async () => {
+  const goal = $("goal").value.trim();
+  if (!goal) return;
+  appendLine(goal, "you");
+  $("goal").value = "";
+  try {
+    const r = await (await fetch(BASE + "/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ goal }) })).json();
+    pollResult(r.id);
+  } catch (e) {
+    appendLine("(bridge not reachable — start it with `./auriga start`)");
+  }
+};
+
+$("clear").onclick = () => { $("transcript").value = ""; };
+
+$("goal").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) $("send").click();
+});
+
+async function pollResult(id) {
+  for (let i = 0; i < 150; i++) {
+    const r = await (await fetch(BASE + "/chat/result?id=" + id)).json();
+    if (r.text) { appendLine(r.text); return; }
+    await new Promise((res) => setTimeout(res, 2000));
+  }
+  appendLine("(no reply after 5 min — is the agent connected?)");
+}
+
 async function loadPerms() {
   const { aurigaAllowed = [], aurigaPending = [] } = await chrome.storage.local.get(["aurigaAllowed", "aurigaPending"]);
   const pend = $("pending");
   pend.innerHTML = "";
   if (!aurigaPending.length) pend.innerHTML = '<div class="muted">no pending approvals</div>';
   for (const o of aurigaPending) {
-    const row = document.createElement("div"); row.className = "row";
+    const row = document.createElement("div"); row.className = "permrow";
     const u = document.createElement("span"); u.className = "url"; u.textContent = o;
     const b = document.createElement("button"); b.textContent = "Allow"; b.className = "ghost";
     b.onclick = async () => {
@@ -35,7 +69,7 @@ async function loadPerms() {
   al.innerHTML = "";
   if (!aurigaAllowed.length) al.innerHTML = '<div class="muted">no sites approved yet</div>';
   for (const o of aurigaAllowed) {
-    const row = document.createElement("div"); row.className = "row";
+    const row = document.createElement("div"); row.className = "permrow";
     const u = document.createElement("span"); u.className = "url"; u.textContent = o;
     const b = document.createElement("button"); b.textContent = "Revoke"; b.className = "ghost";
     b.onclick = async () => {
@@ -45,27 +79,6 @@ async function loadPerms() {
     };
     row.append(u, b); al.append(row);
   }
-}
-
-$("send").onclick = async () => {
-  const goal = $("goal").value.trim();
-  if (!goal) return;
-  $("response").textContent = "sent — waiting for the agent…";
-  try {
-    const r = await (await fetch(BASE + "/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ goal }) })).json();
-    pollResult(r.id);
-  } catch (e) { $("response").textContent = "bridge not reachable — start it with `./auriga start`"; }
-};
-
-$("stop").onclick = () => { $("response").textContent = ""; };
-
-async function pollResult(id) {
-  for (let i = 0; i < 150; i++) {
-    const r = await (await fetch(BASE + "/chat/result?id=" + id)).json();
-    if (r.text) { $("response").textContent = r.text; return; }
-    await new Promise((res) => setTimeout(res, 2000));
-  }
-  $("response").textContent = "no reply after 5 min (is the agent connected?)";
 }
 
 refresh(); loadPerms();

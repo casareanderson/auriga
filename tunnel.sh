@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Maintain the reverse SSH tunnel from this Mac to C1-G4, so an agent there can drive Auriga.
 # Auto-reconnects on drop / laptop sleep.  Usage: ./tunnel.sh   (or install as a launchd agent via install.sh)
-REMOTE="${AURIGA_TUNNEL_REMOTE:-root@100.74.235.132}"
+REMOTE="${AURIGA_TUNNEL_REMOTE:?set AURIGA_TUNNEL_REMOTE to your agent host, e.g. user@your-box}"
 PORT="${AURIGA_TUNNEL_PORT:-8765}"
 while true; do
   echo "$(date '+%H:%M:%S') tunnel ${PORT} -> ${REMOTE}"

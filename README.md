@@ -81,8 +81,8 @@ You run the bridge yourself, so it reads `~/.auriga/config.json` (created by `in
 {
   "port": 8765,
   "agent": "auriga",
-  "ephor_url": "http://100.74.235.132:8899",
-  "ephor_token": "sekret",
+  "ephor_url": "http://your-ephor-host:8899",
+  "ephor_token": "<token>",
   "token": ""
 }
 ```
@@ -93,14 +93,14 @@ Set `ephor_url` + `ephor_token` in `~/.auriga/config.json` and every browser act
 (shown as a "Browser actions" table in the `ephor serve` page and queryable via `ephor browser-actions`):
 
 ```json
-{ "ephor_url": "http://100.74.235.132:8899", "ephor_token": "sekret", "agent": "auriga" }
+{ "ephor_url": "http://your-ephor-host:8899", "ephor_token": "<token>", "agent": "auriga" }
 ```
 
 - `ephor_url` — the Ephor `serve` address (reachable from this machine).
 - `ephor_token` — must match `EPHOR_INGEST_TOKEN` on the Ephor side.
 - `agent` — the label the browser actions are attributed to in Ephor.
 
-On the Ephor box: `EPHOR_INGEST_TOKEN=sekret ephor serve --host 0.0.0.0 --port 8899`. Ships are non-blocking
+On the Ephor box: `EPHOR_INGEST_TOKEN=<token> ephor serve --host 0.0.0.0 --port 8899`. Ships are non-blocking
 and fail silently — if Ephor is down, browser control keeps working and the local JSONL still records everything.
 
 ## Config keys / env vars

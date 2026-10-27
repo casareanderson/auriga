@@ -3,20 +3,22 @@
 <head>
 <meta charset="utf-8">
 <style>
-  body { font: 13px/1.45 system-ui, sans-serif; margin: 0; width: 340px; background: #0f1115; color: #d7dae0; }
-  header { padding: 12px 14px; border-bottom: 1px solid #262b36; display: flex; align-items: center; gap: 8px; }
-  header h1 { font-size: 15px; margin: 0; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: #555; }
+  body { font: 13px/1.45 system-ui, sans-serif; margin: 0; width: 360px; background: #0f1115; color: #d7dae0; }
+  header { padding: 10px 14px; border-bottom: 1px solid #262b36; display: flex; align-items: center; gap: 8px; }
+  header h1 { font-size: 14px; margin: 0; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #555; flex: none; }
   .dot.ok { background: #5bd68a; }
   .dot.bad { background: #ff6b6b; }
   section { padding: 10px 14px; border-bottom: 1px solid #20242e; }
   h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #7d8694; margin: 0 0 8px; }
-  textarea { width: 100%; height: 56px; box-sizing: border-box; background: #161922; color: #d7dae0; border: 1px solid #262b36; border-radius: 6px; padding: 8px; font: inherit; resize: vertical; }
+  textarea { width: 100%; box-sizing: border-box; background: #161922; color: #d7dae0; border: 1px solid #262b36; border-radius: 6px; padding: 8px; font: inherit; resize: vertical; }
+  #transcript { height: 150px; resize: none; overflow-y: auto; white-space: pre-wrap; }
+  #goal { height: 52px; margin-top: 8px; }
   button { background: #2f81f7; color: #fff; border: 0; border-radius: 6px; padding: 7px 12px; cursor: pointer; font: inherit; }
   button.ghost { background: #262b36; }
-  #response { margin-top: 8px; white-space: pre-wrap; color: #9aa4b2; }
-  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0; }
-  .row .url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row { display: flex; gap: 8px; margin-top: 8px; }
+  .permrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0; }
+  .permrow .url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .muted { color: #6b7382; }
 </style>
 </head>
@@ -28,13 +30,13 @@
 </header>
 
 <section>
-  <h2>Chat with the agent</h2>
-  <textarea id="goal" placeholder="e.g. Open the Gelato dashboard and start a hardcover photo book"></textarea>
+  <h2>Chat</h2>
+  <textarea id="transcript" readonly placeholder="Replies will appear here…"></textarea>
+  <textarea id="goal" placeholder="Tell the agent what to do…"></textarea>
   <div class="row">
     <button id="send">Send</button>
-    <button class="ghost" id="stop">Stop</button>
+    <button class="ghost" id="clear">Clear</button>
   </div>
-  <div id="response"></div>
 </section>
 
 <section>
