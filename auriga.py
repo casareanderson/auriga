@@ -35,6 +35,7 @@ EPHOR_URL = _get("ephor_url", "AURIGA_EPHOR_URL") or None
 EPHOR_TOKEN = _get("ephor_token", "AURIGA_EPHOR_TOKEN") or None
 AGENT = _get("agent", "AURIGA_AGENT", "auriga")
 WEBHOOK_URL = _get("webhook_url", "AURIGA_WEBHOOK_URL") or None  # Discord webhook for failure tickets
+SESSION_MAX_MIN = int(_get("session_max_min", "AURIGA_SESSION_MAX_MIN", "0") or 0)  # 0 = off; alert when a session runs this long
 EXT_ORIGIN = "chrome-extension://ocoojeadkmddpggpnfajgpbnahbfgkea"
 SENSITIVE_RESULT = {"cookies", "getCookie"}
 
@@ -93,11 +94,16 @@ def notify_failure(action, params, error):
 def monitor_extension():
     """If the extension stops polling for a while (SW killed / browser closed), raise a ticket."""
     last_notified = 0.0
+    session_alerted = False
+    started = time.time()
     while True:
         time.sleep(30)
         if _last_poll and time.time() - _last_poll > 120 and time.time() - last_notified > 300:
             notify_failure("extension-disconnect", {}, "extension hasn't polled for >2 min (is Chrome open with Auriga loaded?)")
             last_notified = time.time()
+        if SESSION_MAX_MIN and not session_alerted and time.time() - started > SESSION_MAX_MIN * 60:
+            notify_failure("session-timeout", {}, f"session has been live for over {SESSION_MAX_MIN} min")
+            session_alerted = True
 
 
 def audit(action, params, ok, result):

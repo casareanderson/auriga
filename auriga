@@ -16,6 +16,12 @@ in the background if it isn't running (so you don't have to run auriga.py by han
     auriga eval "JS"
     auriga screenshot out.png
     auriga upload "LOCAL-FILE" [SELECTOR]   # set a file input via CDP
+    auriga snapshot                    # accessibility tree with refs (click via click-ref)
+    auriga click-ref REF               # click an element by its snapshot ref
+    auriga click-xy X Y                # click at coordinates
+    auriga hover X Y                   # hover at coordinates
+    auriga capture [console|network|both] [SECONDS]   # capture console/network events
+    auriga extensions                  # list installed extensions + flag automation ones
     auriga cookies [URL]
     auriga get-cookie NAME [URL]
     auriga set-cookie "NAME=VALUE" [URL]
@@ -120,7 +126,7 @@ def setup(args):
     cfg = _cfg()
     keys = {"--ephor-url": "ephor_url", "--ephor-token": "ephor_token",
             "--agent": "agent", "--port": "port", "--token": "token",
-            "--webhook-url": "webhook_url"}
+            "--webhook-url": "webhook_url", "--session-max-min": "session_max_min"}
     i = 0
     while i < len(args):
         if args[i] in keys and i + 1 < len(args):
@@ -181,6 +187,29 @@ def main(argv):
         sel = argv[2] if len(argv) > 2 else None
         r = call("upload", path=argv[1], **({"selector": sel} if sel else {}))
         print("uploaded:", r.get("path", "ok"))
+    elif cmd == "snapshot":
+        for e in call("snapshot"):
+            print(f"@{e.get('ref')}  [{e.get('role')}] {e.get('name')}")
+    elif cmd == "click-ref":
+        r = call("clickRef", ref=argv[1]); print("clicked:", r.get("ref", "ok"))
+    elif cmd == "click-xy":
+        r = call("clickXY", x=argv[1], y=argv[2]); print("clicked:", r.get("x"), r.get("y"))
+    elif cmd == "hover":
+        r = call("hover", x=argv[1], y=argv[2]); print("hovered:", r.get("x"), r.get("y"))
+    elif cmd == "capture":
+        what = argv[1] if len(argv) > 1 else "both"
+        dur = argv[2] if len(argv) > 2 else 3
+        r = call("capture", what=what, duration=dur)
+        for e in r.get("events", []):
+            print(f"[{e.get('type')}] {e.get('level') or e.get('status') or ''} {e.get('url') or e.get('text')}")
+        print(f"({r.get('captured', 0)} events)")
+    elif cmd == "extensions":
+        for e in call("extensions"):
+            flag = "⚙️ automation" if e.get("automation") else "   "
+            state = "on" if e.get("enabled") else "off"
+            print(f"{flag} [{state}] {e.get('name')}  ({e.get('id')})")
+            if e.get("perms"):
+                print(f"          perms: {', '.join(e['perms'])}")
     elif cmd == "cookies":
         url = argv[1] if len(argv) > 1 else None
         for c in call("cookies", **({"url": url} if url else {})):

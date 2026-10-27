@@ -15,7 +15,8 @@ if [ ! -f "$HOME/.auriga/config.json" ]; then
   "agent": "auriga",
   "ephor_url": "",
   "ephor_token": "",
-  "webhook_url": ""
+  "webhook_url": "",
+  "session_max_min": 0
 }
 CFG
   echo "Created ~/.auriga/config.json"

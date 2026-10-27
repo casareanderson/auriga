@@ -25,6 +25,12 @@ your tool/model  ──HTTP──▶  auriga.py (bridge)  ◀──long-poll─�
 ./auriga read                          # dump the active tab's text (or: read "SELECTOR")
 ./auriga eval "document.title"         # run JS in the page
 ./auriga screenshot out.png            # screenshot the active tab
+./auriga upload "~/Downloads/file.pdf"  # set a file input via CDP
+./auriga snapshot                       # accessibility tree with refs (@12345)
+./auriga click-ref 12345                # click by ref from snapshot
+./auriga click-xy 320 240               # click at coordinates
+./auriga hover 320 240                  # hover at coordinates
+./auriga capture both 5                 # capture console + network events for 5s
 ./auriga cookies                       # list cookies for the tab's domain
 ./auriga get-cookie sessionid          # one cookie's value
 ./auriga set-cookie "name=value"       # set a cookie
@@ -61,6 +67,13 @@ curl -s -X POST http://127.0.0.1:8765/command \
 | `getCookie` | `name`, optional `url` | one cookie |
 | `setCookie` | `cookie` (`name=value`), optional `url`, `path` | set a cookie |
 | `removeCookie` | `name`, optional `url` | delete a cookie |
+| `upload` | `path`, optional `selector` | set a file input via CDP |
+| `snapshot` | optional `tabId` | accessibility tree with refs (for `clickRef`) |
+| `clickRef` | `ref` | click an element by its snapshot ref |
+| `clickXY` | `x`, `y` | click at coordinates (canvas, unlabeled icons) |
+| `hover` | `x`, `y` | move the mouse to coordinates |
+| `capture` | `what` (`console`/`network`/`both`), `duration` | capture console + network events |
+| `extensions` | — | list installed extensions + flag automation ones |
 
 ## Auth
 
@@ -113,6 +126,31 @@ and fail silently — if Ephor is down, browser control keeps working and the lo
 | `ephor_url` | `AURIGA_EPHOR_URL` | — | ship each action to this Ephor `serve` URL |
 | `ephor_token` | `AURIGA_EPHOR_TOKEN` | — | token for the Ephor ingest endpoint |
 | `agent` | `AURIGA_AGENT` | `auriga` | agent label used in Ephor |
+| `webhook_url` | `AURIGA_WEBHOOK_URL` | — | Discord webhook for failure tickets |
+| `session_max_min` | `AURIGA_SESSION_MAX_MIN` | `0` (off) | alert if a session runs longer than this many minutes |
+
+## Failure tickets & alerts
+
+Set `webhook_url` to a Discord webhook and Auriga posts a ticket when anything fails or stalls:
+
+- an action errors (element not found, timeout),
+- the extension disconnects (browser closed / service worker killed),
+- a session runs longer than `session_max_min` minutes.
+
+Each ticket carries the action, redacted params, and the error. Failures are also logged to ephor (`ok: false`) and the local audit log.
+
+## Roadmap
+
+- [x] tabs · navigate · click · type · read · eval · screenshot · cookies
+- [x] click-text / find (CSP-heavy sites)
+- [x] upload (CDP file input, incl. iframes) + frameeval (iframe inspection)
+- [x] snapshot (accessibility tree + refs) + click-ref
+- [x] click-xy / hover (coordinates)
+- [x] capture (console + network) for debugging
+- [x] extensions (list installed extensions, flag automation ones)
+- [ ] annotated screenshots (numbered elements for vision models)
+- [ ] streaming chat / side panel
+- [ ] live remote view (screenshot stream)
 
 ## Safety
 
