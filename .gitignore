@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.pyo
+bridge.pid
+bridge.log
+audit.jsonl
+config.json
+*.bak
+.DS_Store

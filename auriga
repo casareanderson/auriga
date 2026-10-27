@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+"""auriga — CLI for the Auriga Chrome extension. Talks to the local bridge and auto-starts it
+in the background if it isn't running (so you don't have to run auriga.py by hand).
+
+    auriga start                       # start the bridge in the background
+    auriga stop                        # stop the bridge
+    auriga status                      # bridge up? extension connected?
+    auriga setup [--ephor-url URL --ephor-token TOK --agent NAME]   # write config
+    auriga tabs                        # list open tabs
+    auriga navigate URL
+    auriga click "CSS SELECTOR"
+    auriga click-text "BUTTON TEXT"     # click by visible text (for CSP-heavy sites)
+    auriga find "TEXT"                  # list elements matching text
+    auriga type "CSS SELECTOR" "TEXT"
+    auriga read [CSS SELECTOR]
+    auriga eval "JS"
+    auriga screenshot out.png
+    auriga upload "LOCAL-FILE" [SELECTOR]   # set a file input via CDP
+    auriga cookies [URL]
+    auriga get-cookie NAME [URL]
+    auriga set-cookie "NAME=VALUE" [URL]
+    auriga delete-cookie NAME [URL]
+"""
+import sys, json, os, base64, time, subprocess, urllib.request
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+BRIDGE = os.path.join(HERE, "auriga.py")
+CONFIG = os.path.expanduser("~/.auriga/config.json")
+PIDFILE = os.path.expanduser("~/.auriga/bridge.pid")
+
+
+def _cfg():
+    try:
+        return json.load(open(CONFIG))
+    except Exception:
+        return {}
+
+
+CFG = _cfg()
+PORT = int(CFG.get("port", 8765))
+BASE = os.environ.get("AURIGA_URL", f"http://127.0.0.1:{PORT}")
+TOKEN = os.environ.get("AURIGA_TOKEN") or CFG.get("token")
+
+
+def _bridge_running():
+    try:
+        urllib.request.urlopen(f"{BASE}/health", timeout=2).read()
+        return True
+    except Exception:
+        return False
+
+
+def start():
+    if _bridge_running():
+        print("bridge already running")
+        return True
+    log = os.path.expanduser("~/.auriga/bridge.log")
+    os.makedirs(os.path.dirname(log), exist_ok=True)
+    with open(log, "a") as fh:
+        subprocess.Popen([sys.executable, BRIDGE], stdout=fh, stderr=subprocess.STDOUT,
+                         start_new_session=True)
+    for _ in range(20):
+        if _bridge_running():
+            print("bridge started (background)")
+            return True
+        time.sleep(0.3)
+    print("bridge started but didn't answer; check ~/.auriga/bridge.log")
+    return False
+
+
+def stop():
+    try:
+        pid = int(open(PIDFILE).read().strip())
+        os.kill(pid, 15)
+        print("bridge stopped")
+        return True
+    except Exception:
+        # fallback: kill whatever holds the port
+        try:
+            out = subprocess.check_output(["lsof", "-ti", f":{PORT}"], text=True).strip()
+            for pid in out.splitlines():
+                subprocess.run(["kill", pid], check=False)
+            print("bridge stopped" if out else "bridge not running")
+            return bool(out)
+        except Exception:
+            print("bridge not running")
+            return False
+
+
+def status():
+    if not _bridge_running():
+        print("bridge: NOT running")
+        print("run `./auriga start`, or just run any command (it auto-starts)")
+        return
+    try:
+        h = json.loads(urllib.request.urlopen(f"{BASE}/health", timeout=3).read())
+        ext = h.get("extension", "?")
+        print(f"bridge:   running on {BASE}")
+        print(f"extension: {'connected' if ext == 'connected' else ext}")
+    except Exception:
+        print(f"bridge:   running on {BASE}")
+
+
+def call(action, **params):
+    if not _bridge_running():
+        if not start():
+            sys.exit("couldn't start the bridge — run:  python3 auriga.py")
+    body = json.dumps({"action": action, **params}).encode()
+    headers = {"Content-Type": "application/json"}
+    if TOKEN:
+        headers["X-Auth-Token"] = TOKEN
+    req = urllib.request.Request(f"{BASE}/command", body, headers)
+    r = json.loads(urllib.request.urlopen(req, timeout=40).read())
+    if not r.get("ok"):
+        sys.exit("error: " + r.get("error", "unknown"))
+    return r.get("result")
+
+
+def setup(args):
+    cfg = _cfg()
+    keys = {"--ephor-url": "ephor_url", "--ephor-token": "ephor_token",
+            "--agent": "agent", "--port": "port", "--token": "token",
+            "--webhook-url": "webhook_url"}
+    i = 0
+    while i < len(args):
+        if args[i] in keys and i + 1 < len(args):
+            cfg[keys[args[i]]] = args[i + 1]
+            i += 2
+        else:
+            i += 1
+    cfg.setdefault("port", 8765)
+    cfg.setdefault("agent", "auriga")
+    os.makedirs(os.path.dirname(CONFIG), exist_ok=True)
+    with open(CONFIG, "w") as f:
+        json.dump(cfg, f, indent=2)
+    print("config written to", CONFIG)
+    print(json.dumps(cfg, indent=2))
+
+
+def tabs():
+    for t in call("tabs"):
+        mark = "*" if t.get("active") else " "
+        print(f"{mark} [{t['id']}] {t.get('title','')[:60]}  {t.get('url','')}")
+
+
+def main(argv):
+    if not argv:
+        print(__doc__); return
+    cmd = argv[0]
+    if cmd == "start":
+        start()
+    elif cmd == "stop":
+        stop()
+    elif cmd == "status":
+        status()
+    elif cmd == "setup":
+        setup(argv[1:])
+    elif cmd == "tabs":
+        tabs()
+    elif cmd == "navigate":
+        call("navigate", url=argv[1]); print("ok")
+    elif cmd == "click":
+        call("click", selector=argv[1]); print("ok")
+    elif cmd == "click-text":
+        r = call("clickText", text=argv[1]); print("clicked:", r.get("text", "ok"))
+    elif cmd == "find":
+        for e in call("find", text=argv[1]):
+            print(f"[{e.get('tag')}] {e.get('text')}  #{e.get('id')} .{e.get('cls')}")
+    elif cmd == "type":
+        call("type", selector=argv[1], text=argv[2]); print("ok")
+    elif cmd == "read":
+        r = call("read", **({"selector": argv[1]} if len(argv) > 1 else {}))
+        print(r.get("title", "")); print(r.get("url", "")); print(r.get("text", ""))
+    elif cmd == "eval":
+        print(json.dumps(call("eval", js=argv[1]).get("result")))
+    elif cmd == "screenshot":
+        data = call("screenshot").get("dataUrl", "")
+        png = base64.b64decode(data.split(",", 1)[1])
+        open(argv[1], "wb").write(png); print("saved", argv[1], len(png), "bytes")
+    elif cmd == "upload":
+        sel = argv[2] if len(argv) > 2 else None
+        r = call("upload", path=argv[1], **({"selector": sel} if sel else {}))
+        print("uploaded:", r.get("path", "ok"))
+    elif cmd == "cookies":
+        url = argv[1] if len(argv) > 1 else None
+        for c in call("cookies", **({"url": url} if url else {})):
+            print(f"{c.get('name')}={c.get('value')}  domain={c.get('domain')} path={c.get('path')} "
+                  f"secure={c.get('secure')} httpOnly={c.get('httpOnly')}")
+    elif cmd == "get-cookie":
+        r = call("getCookie", name=argv[1], **({"url": argv[2]} if len(argv) > 2 else {}))
+        print(json.dumps(r) if r else "(not found)")
+    elif cmd == "set-cookie":
+        url = argv[2] if len(argv) > 2 else None
+        call("setCookie", cookie=argv[1], **({"url": url} if url else {})); print("ok")
+    elif cmd == "delete-cookie":
+        url = argv[2] if len(argv) > 2 else None
+        call("removeCookie", name=argv[1], **({"url": url} if url else {})); print("ok")
+    else:
+        print(__doc__)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
