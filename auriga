@@ -22,6 +22,8 @@ in the background if it isn't running (so you don't have to run auriga.py by han
     auriga hover X Y                   # hover at coordinates
     auriga capture [console|network|both] [SECONDS]   # capture console/network events
     auriga extensions                  # list installed extensions + flag automation ones
+    auriga approve URL [URL...]        # approve sites to control (bypasses the popup)
+    auriga revoke URL [URL...]         # revoke approved sites
     auriga cookies [URL]
     auriga get-cookie NAME [URL]
     auriga set-cookie "NAME=VALUE" [URL]
@@ -210,6 +212,12 @@ def main(argv):
             print(f"{flag} [{state}] {e.get('name')}  ({e.get('id')})")
             if e.get("perms"):
                 print(f"          perms: {', '.join(e['perms'])}")
+    elif cmd == "approve":
+        for u in argv[1:]:
+            r = call("approve", url=u); print("approved:", r.get("approved"))
+    elif cmd == "revoke":
+        for u in argv[1:]:
+            r = call("revoke", url=u); print("revoked:", r.get("revoked"))
     elif cmd == "cookies":
         url = argv[1] if len(argv) > 1 else None
         for c in call("cookies", **({"url": url} if url else {})):

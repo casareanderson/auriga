@@ -57,9 +57,11 @@ async function loadPerms() {
     const b = document.createElement("button"); b.textContent = "Allow"; b.className = "ghost";
     b.onclick = async () => {
       const s = await chrome.storage.local.get(["aurigaAllowed", "aurigaPending"]);
+      const allowed = s.aurigaAllowed || [];
+      const pending = s.aurigaPending || [];
       await chrome.storage.local.set({
-        aurigaAllowed: s.aurigaAllowed.includes(o) ? s.aurigaAllowed : [...s.aurigaAllowed, o],
-        aurigaPending: s.aurigaPending.filter((x) => x !== o),
+        aurigaAllowed: allowed.includes(o) ? allowed : [...allowed, o],
+        aurigaPending: pending.filter((x) => x !== o),
       });
       loadPerms();
     };
@@ -74,7 +76,7 @@ async function loadPerms() {
     const b = document.createElement("button"); b.textContent = "Revoke"; b.className = "ghost";
     b.onclick = async () => {
       const s = await chrome.storage.local.get("aurigaAllowed");
-      await chrome.storage.local.set({ aurigaAllowed: s.aurigaAllowed.filter((x) => x !== o) });
+      await chrome.storage.local.set({ aurigaAllowed: (s.aurigaAllowed || []).filter((x) => x !== o) });
       loadPerms();
     };
     row.append(u, b); al.append(row);

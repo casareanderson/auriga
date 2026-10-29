@@ -38,6 +38,10 @@ async function activeTab() {
 
 const GATED = ["click", "type", "read", "eval", "clickText", "find", "fileinputs", "screenshot", "upload", "frameeval", "snapshot", "clickRef", "clickXY", "hover", "capture"];
 
+function toOrigin(u) {
+  try { return new URL(u).origin; } catch (e) { return u; }
+}
+
 async function originAllowed(url) {
   try {
     const origin = new URL(url).origin;
@@ -81,6 +85,22 @@ async function run(msg) {
       automation: AUTOMATION.test((e.name || "") + " " + (e.id || "")),
       perms: (e.permissions || []).filter((p) => /debugger|webRequest|tabs|management|nativeMessaging|cookies/.test(p)),
     }));
+  }
+
+  if (msg.action === "approve" || msg.action === "revoke") {
+    const origin = toOrigin(msg.url);
+    const s = await chrome.storage.local.get(["aurigaAllowed", "aurigaPending"]);
+    const allowed = s.aurigaAllowed || [];
+    const pending = s.aurigaPending || [];
+    if (msg.action === "approve") {
+      await chrome.storage.local.set({
+        aurigaAllowed: allowed.includes(origin) ? allowed : [...allowed, origin],
+        aurigaPending: pending.filter((x) => x !== origin),
+      });
+      return { approved: origin };
+    }
+    await chrome.storage.local.set({ aurigaAllowed: allowed.filter((x) => x !== origin) });
+    return { revoked: origin };
   }
 
   if (msg.action === "cookies" || msg.action === "getCookie" || msg.action === "setCookie" || msg.action === "removeCookie") {
