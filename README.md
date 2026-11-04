@@ -1,50 +1,82 @@
 # Auriga
 
-A lightweight way to drive your **existing Chrome** (same tabs, same logins) from any local tool or model.
-No MCP server, no big dependency tree — one small Chrome extension + one stdlib-only Python bridge + a tiny CLI.
+Drive your own Chrome from any local tool or model — same tabs, same logins — over a loopback HTTP bridge and a small Chrome extension. No MCP server, no native messaging host, no large dependency tree.
+
+![Auriga architecture](docs/architecture.svg)
+
+## What it does
+
+- List open tabs with their id, title, url and active state — `tabs` action, processed in `extension/background.js` line 72 and `auriga` CLI wrapper line 148.
+- Navigate to URLs, click elements by CSS selector, type text into form fields, read page text, and execute arbitrary JavaScript — handled by `content.js` and routed through `sendToTab()` in `background.js`.
+- Generate PNG screenshots of the active tab via `chrome.tabs.captureVisibleTab` — `screenshot` action in `background.js` line 141.
+- Build an accessibility tree of interactive elements with numeric refs, then click those elements precisely — `snapshot` and `clickRef` in `background.js` lines 243–276.
+- Click or hover at raw screen coordinates for elements without recognisable labels (canvas drawings, icon-only controls) — `clickXY` and `hover` in `background.js` lines 279–292.
+- Upload local files into file input fields across all frames via Chrome DevTools Protocol — `upload` in `background.js` lines 205–241, with frame iteration and change-event firing.
+- Capture console output, network responses and failures for debugging — `capture` action using CDP `Runtime.enable` / `Network.enable` + event collection in `background.js` lines 294–325.
+- List, read, create and delete cookies for the active tab's origin — `cookies`, `getCookie`, `setCookie`, `removeCookie` using the `chrome.cookies` API in `background.js` lines 106–128.
+- Approve or revoke sites for automated control; gated actions require explicit per-origin approval before executing — `aurigaAllowed` / `aurigaPending` stored in `chrome.storage.local` in `background.js` lines 45–104.
+
+## Screenshots
+
+### Bridge test result
+
+Running `test_bridge.py` confirms the HTTP bridge correctly queues commands via long-poll and returns results:
 
 ```
-your tool/model  ──HTTP──▶  auriga.py (bridge)  ◀──long-poll──  Chrome extension  ──▶  the page
-           (127.0.0.1:8765)
+$ python3 test_bridge.py
+command result: {"ok": true, "result": [{"id": 1, "title": "tab", "url": "x", "active": true}]}
+BRIDGE: PASS
 ```
 
-## Install (Linux / macOS)
+(`test_bridge.py` simulates an extension service worker polling `/poll` then submitting a `tabs` command and asserting the result. Run from a checkout: `python3 test_bridge.py`.)
 
-1. `./install.sh` — makes the scripts executable and creates `~/.auriga/config.json`.
-2. `chrome://extensions` → enable **Developer mode** → **Load unpacked** → pick the `extension/` folder.
-3. Start the bridge (keep it running): `python3 auriga.py`
-4. Test: `./auriga tabs`
+## Quick start
+
+Install on Linux or macOS:
+
+```bash
+# 1. Clone this repository
+git clone https://github.com/casareanderson/auriga && cd auriga
+
+# 2. Run the setup script (makes scripts executable, creates config)
+./install.sh
+
+# 3. Load the Chrome extension
+#    chrome://extensions → Developer mode → Load unpacked → select the extension/ directory
+
+# 4. Start the bridge
+python3 auriga.py
+
+# 5. Test it works
+./auriga tabs
+```
+
+Success looks like a JSON array of tab objects printed to the terminal, e.g.:
+
+```
+ * [1] Home  https://example.com
+   [2] Gmail  https://mail.google.com/mail/u/0/
+```
 
 ## Use
 
+Run commands against the bridge. The CLI auto-starts the bridge if it is not already running.
+
 ```bash
-./auriga tabs                          # list tabs
-./auriga navigate "https://gelato.com" # navigate the active tab
-./auriga click "#login-button"         # click by CSS selector
-./auriga type "input[name=email]" "me@example.com"   # type into a field
-./auriga read                          # dump the active tab's text (or: read "SELECTOR")
-./auriga eval "document.title"         # run JS in the page
-./auriga screenshot out.png            # screenshot the active tab
-./auriga upload "~/Downloads/file.pdf"  # set a file input via CDP
-./auriga snapshot                       # accessibility tree with refs (@12345)
-./auriga click-ref 12345                # click by ref from snapshot
-./auriga click-xy 320 240               # click at coordinates
-./auriga hover 320 240                  # hover at coordinates
-./auriga capture both 5                 # capture console + network events for 5s
-./auriga cookies                       # list cookies for the tab's domain
-./auriga get-cookie sessionid          # one cookie's value
-./auriga set-cookie "name=value"       # set a cookie
-./auriga delete-cookie name            # delete a cookie
+./auriga tabs                           # list open tabs
+./auriga navigate https://example.com   # navigate the active tab
+./auriga click "#login-button"          # click by CSS selector
+./auriga type "input[name=email]" "me@example.com"  # type text into a field
+./auriga read                           # dump the active tab's text
+./auriga eval "document.title"          # run JavaScript in the page
+./auriga screenshot out.png             # save a PNG screenshot
+./auriga snapshot                       # accessibility tree with clickable refs
+./auriga click-ref 12345                # click by ref from a snapshot
+./auriga cookies                        # list cookies for the tab origin
+./auriga extensions                     # list installed extensions
 ```
 
-## Drive it from any tool
-
-The bridge exposes a plain HTTP API on `127.0.0.1:8765` (loopback only):
-
-- `GET  /health`
-- `POST /command`  body `{"action": "click", "selector": "#x", "tabId": 12}` — blocks until the extension replies
-
-So any model that can make an HTTP call (or `curl`) can drive it:
+You can also talk to the HTTP API directly:
 
 ```bash
 curl -s -X POST http://127.0.0.1:8765/command \
@@ -52,115 +84,103 @@ curl -s -X POST http://127.0.0.1:8765/command \
   -d '{"action":"type","selector":"input[name=q]","text":"hello"}'
 ```
 
-## Commands
+All 17 supported actions (`click`, `navigate`, `tabs`, `read`, `eval`, `screenshot`, `snapshot`, `clickRef`, `clickXY`, `hover`, `upload`, `capture`, `extensions`, `approve`, `revoke`, `cookies`, `find`) are listed in the CLI wrapper help (`./auriga`).
 
-| action | params | does |
-|---|---|---|
-| `tabs` | — | list tabs (id, title, url, active) |
-| `navigate` | `url`, optional `tabId` | navigate |
-| `click` | `selector`, optional `tabId` | click an element |
-| `type` | `selector`, `text`, optional `tabId` | focus + set value + fire input/change |
-| `read` | optional `selector`, optional `tabId` | page text / element text |
-| `eval` | `js`, optional `tabId` | run JS, JSON result |
-| `screenshot` | optional `tabId` | PNG data URL |
-| `cookies` | optional `url` | list cookies for the domain |
-| `getCookie` | `name`, optional `url` | one cookie |
-| `setCookie` | `cookie` (`name=value`), optional `url`, `path` | set a cookie |
-| `removeCookie` | `name`, optional `url` | delete a cookie |
-| `upload` | `path`, optional `selector` | set a file input via CDP |
-| `snapshot` | optional `tabId` | accessibility tree with refs (for `clickRef`) |
-| `clickRef` | `ref` | click an element by its snapshot ref |
-| `clickXY` | `x`, `y` | click at coordinates (canvas, unlabeled icons) |
-| `hover` | `x`, `y` | move the mouse to coordinates |
-| `capture` | `what` (`console`/`network`/`both`), `duration` | capture console + network events |
-| `extensions` | — | list installed extensions + flag automation ones |
+## Configuration
 
-## Auth
-
-Two layers, both local:
-
-1. **Loopback-only bind** — the bridge listens on `127.0.0.1`, so only processes on this machine can reach it.
-2. **Optional shared token** — set `"token": "..."` in `~/.auriga/config.json` (or `AURIGA_TOKEN`), and pass the same token to the CLI / HTTP caller (`X-Auth-Token` header or `?token=`). Without it set, no token is required (loopback is the whole gate).
-
-## Audit log (everything stays local)
-
-Every command is appended to a local JSONL log — default `~/.auriga/audit.jsonl`, override with `AURIGA_AUDIT`. Typed text, eval'd JS and cookie values are redacted so no passwords/keys/cookies end up in the log. Nothing leaves the machine.
-
-## Config file
-
-You run the bridge yourself, so it reads `~/.auriga/config.json` (created by `install.sh`); env vars still override it:
-
-```json
-{
-  "port": 8765,
-  "agent": "auriga",
-  "ephor_url": "http://your-ephor-host:8899",
-  "ephor_token": "<token>",
-  "token": ""
-}
-```
-
-## Ship logs to Ephor
-
-Set `ephor_url` + `ephor_token` in `~/.auriga/config.json` and every browser action lands in Ephor's store
-(shown as a "Browser actions" table in the `ephor serve` page and queryable via `ephor browser-actions`):
-
-```json
-{ "ephor_url": "http://your-ephor-host:8899", "ephor_token": "<token>", "agent": "auriga" }
-```
-
-- `ephor_url` — the Ephor `serve` address (reachable from this machine).
-- `ephor_token` — must match `EPHOR_INGEST_TOKEN` on the Ephor side.
-- `agent` — the label the browser actions are attributed to in Ephor.
-
-On the Ephor box: `EPHOR_INGEST_TOKEN=<token> ephor serve --host 0.0.0.0 --port 8899`. Ships are non-blocking
-and fail silently — if Ephor is down, browser control keeps working and the local JSONL still records everything.
-
-## Config keys / env vars
+The bridge reads `~/.auriga/config.json` (created by `install.sh`). Environment variables override the config file:
 
 | config key | env var | default | purpose |
 |---|---|---|---|
-| `port` | `AURIGA_PORT` | `8765` | host HTTP port |
-| `token` | `AURIGA_TOKEN` | — | if set, the HTTP API requires this token |
-| `audit` | `AURIGA_AUDIT` | `~/.auriga/audit.jsonl` | local audit log |
-| `ephor_url` | `AURIGA_EPHOR_URL` | — | ship each action to this Ephor `serve` URL |
-| `ephor_token` | `AURIGA_EPHOR_TOKEN` | — | token for the Ephor ingest endpoint |
-| `agent` | `AURIGA_AGENT` | `auriga` | agent label used in Ephor |
-| `webhook_url` | `AURIGA_WEBHOOK_URL` | — | Discord webhook for failure tickets |
-| `session_max_min` | `AURIGA_SESSION_MAX_MIN` | `0` (off) | alert if a session runs longer than this many minutes |
+| `port` | `AURIGA_PORT` | `8765` | HTTP listen port |
+| `token` | `AURIGA_TOKEN` | — | optional shared auth token for the HTTP API |
+| `audit` | `AURIGA_AUDIT` | `~/.auriga/audit.jsonl` | path to the local audit log |
+| `ephor_url` | `AURIGA_EPHOR_URL` | — | send each action to an Ephor ingest endpoint |
+| `ephor_token` | `AURIGA_EPHOR_TOKEN` | — | bearer token used when shipping to Ephor |
+| `agent` | `AURIGA_AGENT` | `auriga` | label shown in Ephor for attribution |
+| `webhook_url` | `AURIGA_WEBHOOK_URL` | — | Discord webhook URL for failure tickets |
+| `session_max_min` | `AURIGA_SESSION_MAX_MIN` | `0` | alert when a bridge session runs longer than this many minutes |
 
-## Failure tickets & alerts
+Auth for the HTTP API uses two layers:
 
-Set `webhook_url` to a Discord webhook and Auriga posts a ticket when anything fails or stalls:
+1. **Loopback bind only** — the bridge listens on `127.0.0.1`, so only local processes can reach it.
+2. **Optional shared token** — set `token` in the config (or `AURIGA_TOKEN`) and pass the same value via the `X-Auth-Token` header or `?token=` query parameter on every request. When unset, loopback alone gates access.
 
-- an action errors (element not found, timeout),
-- the extension disconnects (browser closed / service worker killed),
-- a session runs longer than `session_max_min` minutes.
+Site authorisation is per-origin in the extension's storage (`chrome.storage.local`). Before executing gated actions (`click`, `type`, `read`, `eval`, etc.), the extension checks whether the tab's origin is in the `aurigaAllowed` list and throws if not.
 
-Each ticket carries the action, redacted params, and the error. Failures are also logged to ephor (`ok: false`) and the local audit log.
+## How it works
+
+Three components communicate over localhost:
+
+1. **CLI wrapper** (`auriga`) — a thin Python script that auto-starts the bridge if needed, sends commands as JSON to the HTTP endpoint, and pretty-prints results.
+2. **Bridge** (`auriga.py`) — a stdlib-only `http.server.ThreadingHTTPServer` bound to `127.0.0.1`. It accepts commands via `POST /command`, queues them internally, blocks until the extension replies, writes a redacted entry to the local audit log, optionally ships to Ephor, and posts failure tickets to a configured webhook. The extension connects via `GET /poll` (long-poll).
+3. **Chrome extension** — a Manifest V3 service worker (`background.js`) that polls `/poll`, dispatches commands using the Chrome Extension APIs (`chrome.tabs`, `chrome.cookies`, `chrome.scripting`, `chrome.storage`) and Chrome DevTools Protocol (`chrome.debugger`), then posts the result back to `POST /result`. Content scripts run on every page and handle element-level actions (click, type, read).
+
+```mermaid
+graph LR
+    Tool["Tool / Model"] -->|"POST /command"| Bridge[auriga.py\nlocalhost:8765]
+    Bridge -->|"block until reply"| Ext[Chrome extension\nservice worker]
+    Ext -->|"GET /poll"| Bridge
+    Ext -->|"POST /result"| Bridge
+    Bridge --> "audit.jsonl" Audit["Audit log\n(~/.auriga/)"]
+    Bridge -.-> ship("ship_to_ephor") Ephor["Ephor ingest\n(optional)"]
+    Ext --> debugger["chrome.debugger\n(CDP)"] Page[Browser page\ncontent script]
+```
+
+### Project structure
+
+```
+auriga/
+├── auriga            CLI wrapper (Python)
+├── auriga.py         Local HTTP bridge (stdlib only)
+├── install.sh        One-time setup script
+├── tunnel.sh         Reverse SSH tunnel helper
+├── test_bridge.py    End-to-end bridge test (no browser)
+└── extension/        Chrome extension (Manifest V3)
+    ├── manifest.json       App identity and permissions
+    ├── background.js       Service worker (poll loop, command executor)
+    ├── content.js          Page content script (element actions)
+    └── popup.html          Site-approval UI
+```
+
+## Status and limits
+
+- Version 0.3.0 (from `manifest.json`), last code review: 2026-11-04.
+- Supports 17 CLI actions covering tab management, page interaction, DOM reading, screenshots, file upload, and debugging.
+- Runs only on Linux and macOS (the macOS reverse-tunnel installer uses `launchd`; Linux requires manual `tunnel.sh` execution).
+- The bridge requires no third-party Python packages — pure stdlib.
+- Nothing leaves the machine except what you explicitly configure to ship (Ephor URL, Discord webhook). Both ship asynchronously and fail silently.
+- `session_max_min` defaults to off (value `0`); increase to set a session age alert.
+
+Known gaps:
+
+- No annotated screenshots (numbered element overlays for vision-model input) — tracked in the roadmap.
+- No streaming side panel or chat interface for iterative browsing.
+- No live remote view capability (screen stream to a remote dashboard).
 
 ## Roadmap
 
-- [x] tabs · navigate · click · type · read · eval · screenshot · cookies
-- [x] click-text / find (CSP-heavy sites)
-- [x] upload (CDP file input, incl. iframes) + frameeval (iframe inspection)
-- [x] snapshot (accessibility tree + refs) + click-ref
-- [x] click-xy / hover (coordinates)
-- [x] capture (console + network) for debugging
-- [x] extensions (list installed extensions, flag automation ones)
-- [ ] annotated screenshots (numbered elements for vision models)
-- [ ] streaming chat / side panel
-- [ ] live remote view (screenshot stream)
+| Item | Status |
+|---|---|
+| Basic tab actions (tabs, navigate, click, type, read, eval, screenshot, cookies) | Done |
+| `click-text` / `find` for CSP-heavy sites | Done |
+| File upload with iframe support | Done |
+| Accessibility tree snapshots and ref-based clicking | Done |
+| Coordinate-based click/hover | Done |
+| Console + network capture for debugging | Done |
+| Installed-extension inspector | Done |
+| Annotated screenshots for vision models | In progress |
+| Streaming chat / side panel | Planned |
+| Live remote view (screenshot stream) | Planned |
 
 ## Safety
 
-- The HTTP API binds to `127.0.0.1` only — nothing on the network can reach it.
-- Nothing is automated without a call from the tool; there is no "always-on" controller.
-- Be careful driving pages that spend money (checkout/order buttons). The CLI just does what you tell it.
+- The HTTP API binds to `127.0.0.1` only. Nothing on the network can reach it.
+- Every action requires a deliberate call from a tool; there is no always-on controller.
+- Gated actions require per-origin approval through the extension popup before they execute.
+- Typed text, evaluated JavaScript and cookie values are redacted in the audit log.
+- The bridge monitors the extension connection; if the browser closes or the service worker dies, a failure ticket fires after 120 seconds.
 
-## Files
+## Licence
 
-- `extension/` — manifest + background + content script (load unpacked)
-- `auriga.py` — the local HTTP bridge (stdlib only; run it and keep it running)
-- `auriga` — CLI wrapper
-- `install.sh` — one-time setup (chmod + config template)
+Auriga is licensed under the GNU Affero General Public License v3.0. See `LICENSE` for the full text.
