@@ -20,7 +20,17 @@ Drive your own Chrome from any local tool or model — same tabs, same logins �
 
 ## What it does
 
-### Bridge test result
+- List open tabs with their id, title, url and active state — `tabs` action, processed in `extension/background.js` line 72 and `auriga` CLI wrapper line 148.
+- Navigate to URLs, click elements by CSS selector, type text into form fields, read page text, and execute arbitrary JavaScript — handled by `content.js` and routed through `sendToTab()` in `background.js`.
+- Generate PNG screenshots of the active tab via `chrome.tabs.captureVisibleTab` — `screenshot` action in `background.js` line 141.
+- Build an accessibility tree of interactive elements with numeric refs, then click those elements precisely — `snapshot` and `clickRef` in `background.js` lines 243–276.
+- Click or hover at raw screen coordinates for elements without recognisable labels (canvas drawings, icon-only controls) — `clickXY` and `hover` in `background.js` lines 279–292.
+- Upload local files into file input fields across all frames via Chrome DevTools Protocol — `upload` in `background.js` lines 205–241, with frame iteration and change-event firing.
+- Capture console output, network responses and failures for debugging — `capture` action using CDP `Runtime.enable` / `Network.enable` + event collection in `background.js` lines 294–325.
+- List, read, create and delete cookies for the active tab's origin — `cookies`, `getCookie`, `setCookie`, `removeCookie` using the `chrome.cookies` API in `background.js` lines 106–128.
+- Approve or revoke sites for automated control; gated actions require explicit per-origin approval before executing — `aurigaAllowed` / `aurigaPending` stored in `chrome.storage.local` in `background.js` lines 45–104.
+
+## Screenshots
 
 Running `test_bridge.py` confirms the HTTP bridge correctly queues commands via long-poll and returns results:
 
