@@ -32,15 +32,15 @@ Drive your own Chrome from any local tool or model — same tabs, same logins �
 
 ## Screenshots
 
-Running `test_bridge.py` confirms the HTTP bridge correctly queues commands via long-poll and returns results:
+Running the tests confirms the HTTP bridge correctly queues commands via long-poll and returns results:
 
 ```
-$ python3 test_bridge.py
-command result: {"ok": true, "result": [{"id": 1, "title": "tab", "url": "x", "active": true}]}
-BRIDGE: PASS
+$ python3 -m pytest -q
+...                                                                      [100%]
+3 passed in 0.12s
 ```
 
-(`test_bridge.py` simulates an extension service worker polling `/poll` then submitting a `tabs` command and asserting the result. Run from a checkout: `python3 test_bridge.py`.)
+(`test_bridge.py` simulates an extension service worker polling `/poll` then answering `tabs`, `find` and `clickText` commands and asserting each result. Run from a checkout: `python3 -m pytest -q`.)
 
 ## Quick start
 
@@ -78,6 +78,8 @@ Run commands against the bridge. The CLI auto-starts the bridge if it is not alr
 ./auriga tabs                           # list open tabs
 ./auriga navigate https://example.com   # navigate the active tab
 ./auriga click "#login-button"          # click by CSS selector
+./auriga click-text "Log in"            # click an element by its visible text
+./auriga find "login"                   # list elements whose text matches
 ./auriga type "input[name=email]" "me@example.com"  # type text into a field
 ./auriga read                           # dump the active tab's text
 ./auriga eval "document.title"          # run JavaScript in the page
@@ -96,7 +98,7 @@ curl -s -X POST http://127.0.0.1:8765/command \
   -d '{"action":"type","selector":"input[name=q]","text":"hello"}'
 ```
 
-All 17 supported actions (`click`, `navigate`, `tabs`, `read`, `eval`, `screenshot`, `snapshot`, `clickRef`, `clickXY`, `hover`, `upload`, `capture`, `extensions`, `approve`, `revoke`, `cookies`, `find`) are listed in the CLI wrapper help (`./auriga`).
+All 19 supported actions (`click`, `clickText`, `navigate`, `tabs`, `read`, `type`, `eval`, `screenshot`, `snapshot`, `clickRef`, `clickXY`, `hover`, `upload`, `capture`, `extensions`, `approve`, `revoke`, `cookies`, `find`) are listed in the CLI wrapper help (`./auriga`).
 
 ## Configuration
 
@@ -158,7 +160,7 @@ auriga/
 ## Status and limits
 
 - Version 0.3.0 (from `manifest.json`), last code review: 2026-11-04.
-- Supports 17 CLI actions covering tab management, page interaction, DOM reading, screenshots, file upload, and debugging.
+- Supports 19 CLI actions covering tab management, page interaction, DOM reading, screenshots, file upload, and debugging.
 - Runs only on Linux and macOS (the macOS reverse-tunnel installer uses `launchd`; Linux requires manual `tunnel.sh` execution).
 - The bridge requires no third-party Python packages — pure stdlib.
 - Nothing leaves the machine except what you explicitly configure to ship (Ephor URL, Discord webhook). Both ship asynchronously and fail silently.
