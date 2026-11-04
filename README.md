@@ -4,19 +4,21 @@ Drive your own Chrome from any local tool or model — same tabs, same logins �
 
 ![Auriga architecture](docs/architecture.svg)
 
+## Contents
+
+- [Auriga architecture](#auriga-architecture)
+- [What it does](#what-it-does)
+- [Screenshots](#screenshots)
+- [Quick start](#quick-start)
+- [Usage](#usage)
+- [Configuration](#configuration)
+- [How it works](#how-it-works)
+- [Status and limits](#status-and-limits)
+- [Roadmap](#roadmap)
+- [Safety](#safety)
+- [Licence](#licence)
+
 ## What it does
-
-- List open tabs with their id, title, url and active state — `tabs` action, processed in `extension/background.js` line 72 and `auriga` CLI wrapper line 148.
-- Navigate to URLs, click elements by CSS selector, type text into form fields, read page text, and execute arbitrary JavaScript — handled by `content.js` and routed through `sendToTab()` in `background.js`.
-- Generate PNG screenshots of the active tab via `chrome.tabs.captureVisibleTab` — `screenshot` action in `background.js` line 141.
-- Build an accessibility tree of interactive elements with numeric refs, then click those elements precisely — `snapshot` and `clickRef` in `background.js` lines 243–276.
-- Click or hover at raw screen coordinates for elements without recognisable labels (canvas drawings, icon-only controls) — `clickXY` and `hover` in `background.js` lines 279–292.
-- Upload local files into file input fields across all frames via Chrome DevTools Protocol — `upload` in `background.js` lines 205–241, with frame iteration and change-event firing.
-- Capture console output, network responses and failures for debugging — `capture` action using CDP `Runtime.enable` / `Network.enable` + event collection in `background.js` lines 294–325.
-- List, read, create and delete cookies for the active tab's origin — `cookies`, `getCookie`, `setCookie`, `removeCookie` using the `chrome.cookies` API in `background.js` lines 106–128.
-- Approve or revoke sites for automated control; gated actions require explicit per-origin approval before executing — `aurigaAllowed` / `aurigaPending` stored in `chrome.storage.local` in `background.js` lines 45–104.
-
-## Screenshots
 
 ### Bridge test result
 
@@ -58,7 +60,7 @@ Success looks like a JSON array of tab objects printed to the terminal, e.g.:
    [2] Gmail  https://mail.google.com/mail/u/0/
 ```
 
-## Use
+## Usage
 
 Run commands against the bridge. The CLI auto-starts the bridge if it is not already running.
 
