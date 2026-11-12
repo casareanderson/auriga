@@ -12,6 +12,7 @@ Drive your own Chrome from any local tool or model — same tabs, same logins �
 - [Quick start](#quick-start)
 - [Usage](#usage)
 - [Live view](#live-view)
+- [Side panel](#side-panel)
 - [MCP server](#mcp-server-connect-an-llm)
 - [Autostart](#autostart-macos)
 - [Configuration](#configuration)
@@ -28,6 +29,7 @@ Drive your own Chrome from any local tool or model — same tabs, same logins �
 - Navigate to URLs, click elements by CSS selector, type text into form fields, read page text, and execute arbitrary JavaScript — handled by `content.js` and routed through `sendToTab()` in `background.js`.
 - Generate PNG screenshots of the active tab via `chrome.tabs.captureVisibleTab` — `screenshot` action in `background.js` line 141.
 - Stream a live view of the active tab to any browser — `GET /live` returns one fresh PNG frame, `GET /live.html` is a self-refreshing viewer page (see [Live view](#live-view)).
+- Drive the extension from a Chrome side panel — a streaming chat / command UI that talks to the same localhost bridge (see [Side panel](#side-panel)).
 - Build an accessibility tree of interactive elements with numeric refs, then click those elements precisely — `snapshot` and `clickRef` in `background.js` lines 243–276.
 - Click or hover at raw screen coordinates for elements without recognisable labels (canvas drawings, icon-only controls) — `clickXY` and `hover` in `background.js` lines 279–292.
 - Upload local files into file input fields across all frames via Chrome DevTools Protocol — `upload` in `background.js` lines 205–241, with frame iteration and change-event firing.
@@ -120,6 +122,19 @@ Notes:
 - If a token is configured (`AURIGA_TOKEN`), pass it as `?token=…` on the endpoint and the viewer page (`…/live.html?token=…`); the page embeds it in each frame request (an `<img>` cannot send the `X-Auth-Token` header).
 - Live frames are **not** written to the audit log or shipped to Ephor — the stream is a continuous view, not a discrete action, so it is exempt from per-command audit. `/command` audit behaviour is unchanged.
 - Access through the reverse SSH tunnel (`tunnel.sh`) works as-is: the tunnel already exposes `127.0.0.1:8765`.
+
+## Side panel
+
+A Chrome side panel (MV3, Chrome 114+) gives you a persistent streaming chat / command surface alongside the page. It is **additive** — the action toolbar icon keeps opening the existing site-approval popup (`popup.html`); the panel is opened from Chrome's side-panel menu or by pinning it. The panel talks to the same localhost bridge, so it needs the bridge running (`./auriga start`) and the extension polling.
+
+What the panel (`extension/sidepanel.html` + `extension/sidepanel.js`) does:
+
+- **Status bar** — polls `GET /health` every 5 s and shows whether the bridge is up and the extension is connected.
+- **Command input** — paste either:
+  - a JSON action body (`{"action":"eval","expr":"1+1"}`), which is POSTed to `POST /command` and shows the single blocking result; or
+  - a free-text goal, which streams via `POST /chat` + polling `GET /chat/result?id=` and appends the reply as it arrives.
+- **Optional token** — if the bridge runs with `AURIGA_TOKEN` set, fill in the token field (persisted in `chrome.storage.local`) and it is sent as the `X-Auth-Token` header on `/command` and `/chat`. Leave it blank when no token is configured.
+- Results are appended with `textContent` (never `innerHTML`) and the log auto-scrolls.
 
 ## MCP server (connect an LLM)
 
@@ -256,7 +271,7 @@ Known gaps:
 | Console + network capture for debugging | Done |
 | Installed-extension inspector | Done |
 | Annotated screenshots for vision models | In progress |
-| Streaming chat / side panel | Planned |
+| Streaming chat / side panel | Done |
 | Live remote view (screenshot stream) | Done |
 
 ## Safety

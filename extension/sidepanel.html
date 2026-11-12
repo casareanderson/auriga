@@ -1,0 +1,62 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Auriga side panel</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font: 13px/1.45 system-ui, sans-serif; margin: 0; background: #0f1115; color: #d7dae0; }
+  header { padding: 10px 14px; border-bottom: 1px solid #262b36; display: flex; align-items: center; gap: 8px; position: sticky; top: 0; background: #0f1115; z-index: 2; }
+  header h1 { font-size: 14px; margin: 0; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #555; flex: none; }
+  .dot.ok { background: #5bd68a; box-shadow: 0 0 6px #5bd68a88; }
+  .dot.warn { background: #e3b341; }
+  .dot.bad { background: #ff6b6b; }
+  .muted { color: #6b7382; }
+  .controls { display: flex; gap: 6px; padding: 10px 14px; border-bottom: 1px solid #20242e; }
+  .controls input[type=text] { flex: 1; background: #161922; color: #d7dae0; border: 1px solid #262b36; border-radius: 6px; padding: 8px; font: inherit; min-width: 0; }
+  .controls input[type=text]:disabled { opacity: .5; }
+  .mode { display: flex; align-items: center; gap: 6px; }
+  .mode span { font-size: 11px; color: #8a92a1; word-break: break-word; }
+  button { background: #2f81f7; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer; font: inherit; }
+  button.ghost { background: #262b36; }
+  button:disabled { opacity: .55; cursor: default; }
+  .log { padding: 12px 14px; }
+  .log-entry { margin-bottom: 12px; }
+  .log-entry .who { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #7d8694; margin-right: 6px; }
+  .log-entry .line { white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .log-entry.user .line { color: #aeb6c4; }
+  .log-entry.result .line { color: #5bd68a; }
+  .log-entry.error .line { color: #ff6b6b; }
+  .log-entry.stream .line { color: #7ec8ff; }
+  .token { display: flex; align-items: center; gap: 6px; padding: 8px 14px; border-top: 1px solid #20242e; }
+  .token label { font-size: 11px; color: #8a92a1; }
+  .token input[type=password] { background: #161922; color: #d7dae0; border: 1px solid #262b36; border-radius: 6px; padding: 5px 8px; font: inherit; flex: 1; }
+  .empty { color: #6b7382; font-style: italic; }
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="dot"></span>
+  <h1>Auriga</h1>
+  <span class="muted" id="status">checking…</span>
+</header>
+
+<div class="controls">
+  <input type="text" id="input" placeholder="Command or goal… (CMD+Enter to send)" autocomplete="off">
+  <button id="send">Send</button>
+</div>
+<div class="controls mode">
+  <span>JSON with an <code>"action"</code> runs as <code>/command</code>; free text streams via <code>/chat</code> + poll.</span>
+</div>
+
+<div class="log" id="log"><span class="empty" id="empty">Run a command to see results here…</span></div>
+
+<div class="token">
+  <label for="token">Bridge token</label>
+  <input type="password" id="token" placeholder="omit unless AURIGA_TOKEN is set" autocomplete="off">
+</div>
+
+<script src="sidepanel.js"></script>
+</body>
+</html>
