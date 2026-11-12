@@ -32,15 +32,15 @@ Drive your own Chrome from any local tool or model — same tabs, same logins �
 
 ## Screenshots
 
-Running `test_bridge.py` confirms the HTTP bridge correctly queues commands via long-poll and returns results:
+`test_bridge.py` starts the bridge and a simulated extension service worker, then drives every basic action — `tabs`, `navigate`, `click`, `type`, `read`, `eval`, `screenshot`, `cookies` — through the HTTP bridge and asserts each action and its params round-trip correctly:
 
 ```
-$ python3 test_bridge.py
-command result: {"ok": true, "result": [{"id": 1, "title": "tab", "url": "x", "active": true}]}
-BRIDGE: PASS
+$ python3 -m pytest -q
+........                                                                 [100%]
+8 passed in 0.14s
 ```
 
-(`test_bridge.py` simulates an extension service worker polling `/poll` then submitting a `tabs` command and asserting the result. Run from a checkout: `python3 test_bridge.py`.)
+(`test_bridge.py` simulates the service worker long-polling `/poll` and echoing each command back via `/result`. Run from a checkout: `python3 -m pytest -q`.)
 
 ## Quick start
 
