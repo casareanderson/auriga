@@ -73,6 +73,50 @@ Success looks like a JSON array of tab objects printed to the terminal, e.g.:
    [2] Gmail  https://mail.google.com/mail/u/0/
 ```
 
+## Install on Windows
+
+Requirements: Python 3.10+ from [python.org](https://www.python.org/downloads/),
+with **"Add Python to PATH"** and **"Install the py launcher"** both ticked during
+setup. Then, in a checkout of this repository:
+
+```bat
+# 1. Run the setup script (creates config + registers autostart, starts bridge)
+install.bat
+
+# 2. Load the Chrome extension
+#    chrome://extensions → Developer mode → Load unpacked → select the extension/ directory
+
+# 3. Test it works
+auriga.bat tabs
+```
+
+What `install.bat` does:
+
+- Resolves an absolute path to `pythonw.exe` (via `where`, then the `py` launcher,
+  then per-user install paths) so the autostart never depends on `python`/`py` being
+  on the logon PATH.
+- Idempotently writes `%USERPROFILE%\.auriga\config.json` (same defaults as
+  `install.sh`; an existing config is left untouched).
+- Registers the bridge as a Task Scheduler task **AurigaBridge** running at logon
+  (`ONLOGON`, 30s delay) with `pythonw.exe` so it starts with no console window. It
+  runs in your interactive session as the current user — no elevation, no `SYSTEM`.
+- Starts the bridge immediately and redirects its output to
+  `%USERPROFILE%\.auriga\bridge.log`.
+
+The `auriga.bat` file is the CLI wrapper — run any command as `auriga.bat <cmd>`
+instead of `./auriga`. `%~dp0auriga` hands the extension-less script to Python
+explicitly, which is required on Windows.
+
+Disable or uninstall the autostart:
+
+```bat
+schtasks /End    /TN AurigaBridge
+schtasks /Delete /TN AurigaBridge /F
+```
+
+Manual alternative: press **Win+R**, type `shell:startup`, and create a **Shortcut**
+whose Target is `"<path>\pythonw.exe" "<path>\auriga.py"`.
+
 ## Usage
 
 Run commands against the bridge. The CLI auto-starts the bridge if it is not already running.
@@ -200,7 +244,9 @@ auriga/
 ├── auriga            CLI wrapper (Python)
 ├── auriga.py         Local HTTP bridge (stdlib only)
 ├── mcp_server.py     MCP server (connect an LLM)
-├── install.sh        One-time setup script
+├── install.sh        One-time setup script (Linux/macOS)
+├── install.bat       One-time setup script (Windows)
+├── auriga.bat        CLI wrapper for Windows
 ├── tunnel.sh         Reverse SSH tunnel helper
 ├── test_bridge.py    End-to-end bridge test (no browser)
 └── extension/        Chrome extension (Manifest V3)
@@ -214,7 +260,7 @@ auriga/
 
 - Version 0.3.0 (from `manifest.json`), last code review: 2026-11-04.
 - Supports 17 CLI actions covering tab management, page interaction, DOM reading, screenshots, file upload, and debugging.
-- Runs only on Linux and macOS (the macOS reverse-tunnel installer uses `launchd`; Linux requires manual `tunnel.sh` execution).
+- Runs on Linux, macOS and Windows. The macOS reverse-tunnel installer uses `launchd`; Linux requires manual `tunnel.sh` execution; Windows registers the bridge as a `schtasks` logon task (see [Install on Windows](#install-on-windows)).
 - The bridge requires no third-party Python packages — pure stdlib.
 - Nothing leaves the machine except what you explicitly configure to ship (Ephor URL, Discord webhook). Both ship asynchronously and fail silently.
 - `session_max_min` defaults to off (value `0`); increase to set a session age alert.
