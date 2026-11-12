@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy — Auriga</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="wrap nav">
+      <span class="logo"><img src="favicon-32x32.png" alt="Auriga"> Auriga</span>
+      <span class="spacer"></span>
+      <a href="index.html">Home</a>
+      <a href="terms.html">Terms</a>
+      <a href="https://github.com/casareanderson/auriga">GitHub</a>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="hero">
+      <h1>Privacy Policy</h1>
+      <p class="lede muted small">Last updated: 12 November 2026</p>
+    </div>
+
+    <section>
+      <h2>Summary</h2>
+      <p>
+        Auriga is a local tool. It does not operate a server, does not create an account for you,
+        and does not send your data anywhere. The extension, bridge and CLI all run on your own
+        computer, and the information they handle stays there.
+      </p>
+    </section>
+
+    <section>
+      <h2>What Auriga does and does not collect</h2>
+      <h3>We do not collect anything</h3>
+      <p>
+        Auriga has no analytics, no telemetry, no advertising and no cloud backend. We — the
+        developer — do not receive any of your browsing data, logins, cookies, commands or
+        screenshots. There is no account and no server to send anything to.
+      </p>
+      <h3>What stays on your machine</h3>
+      <p>Auriga processes the following locally, and only locally:</p>
+      <ul class="features">
+        <li>Tab titles, URLs and page contents, when you ask it to read or act on a page.</li>
+        <li>Cookies, when you use the cookie actions.</li>
+        <li>Screenshots, when you request one.</li>
+        <li>Typed text and executed JavaScript, when you instruct an action.</li>
+      </ul>
+      <p>
+        These exist only for the moment they are needed to carry out the action you requested, and
+        are not stored unless you enable the optional local audit log (see below).
+      </p>
+    </section>
+
+    <section>
+      <h2>The local audit log</h2>
+      <p>
+        If you enable it, Auriga can append each command to a local JSONL file
+        (<code>~/.auriga/audit.jsonl</code> by default). This file is written to your own disk and
+        is never transmitted. As a safeguard, typed text, evaluated JavaScript and cookie values are
+        redacted before they are written, so secrets do not end up in the log.
+      </p>
+      <p>
+        You may also choose to ship audit events to your own
+        <a href="https://github.com/casareanderson/ephor">Ephor</a> instance. That is an
+        optional, self-hosted service you configure and run yourself; Auriga does not ship events to
+        any first-party server.
+      </p>
+    </section>
+
+    <section>
+      <h2>Permissions</h2>
+      <p>
+        The Chrome extension requests browser permissions (tabs, scripting, cookies, downloads,
+        debugger, and so on) so it can carry out the actions you ask for on sites you approve. These
+        permissions are used to control your browser locally and are not used to collect or transmit
+        information. Per-site approval means nothing runs on a site until you allow it.
+      </p>
+    </section>
+
+    <section>
+      <h2>Third parties</h2>
+      <p>
+        Auriga does not share information with third parties because it does not collect it. The
+        only network requests it makes are the ones you direct it to make, to the websites you are
+        using.
+      </p>
+    </section>
+
+    <section>
+      <h2>Changes to this policy</h2>
+      <p>
+        If this policy changes, the updated version will be posted on this page with a new date.
+        Because Auriga does not operate a service or an account, there is no further notification
+        channel.
+      </p>
+    </section>
+
+    <section>
+      <h2>Contact</h2>
+      <p>
+        Questions about this policy can be raised as an issue in the
+        <a href="https://github.com/casareanderson/auriga">public repository</a>.
+      </p>
+    </section>
+  </div>
+
+  <footer>
+    <div class="wrap cols">
+      <div>
+        <strong>Auriga</strong>
+        <p class="small muted">Local, security-first browser control for your own tools and agents.</p>
+      </div>
+      <div>
+        <a href="index.html">Home</a><br>
+        <a href="terms.html">Terms of Service</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

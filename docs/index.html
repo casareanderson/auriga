@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Auriga — drive your own Chrome from any local tool or AI agent</title>
+  <meta name="description" content="Auriga is a small, local, security-first way to let an AI agent or script drive the Chrome you already use — same tabs, same logins — over a loopback HTTP bridge.">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="wrap nav">
+      <span class="logo"><img src="favicon-32x32.png" alt="Auriga"> Auriga</span>
+      <span class="spacer"></span>
+      <a href="#what">What it does</a>
+      <a href="#install">Install</a>
+      <a href="#usage">Usage</a>
+      <a href="#security">Security</a>
+      <a href="https://github.com/casareanderson/auriga">GitHub</a>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="hero">
+      <h1>Drive the Chrome you already use, from any local tool or AI agent.</h1>
+      <p class="lede">
+        Auriga is a small Chrome extension, a stdlib-only Python bridge and a tiny CLI that let a
+        script or model control your real browser — same tabs, same logins, same session. No MCP
+        server, no native messaging host, no telemetry.
+      </p>
+      <div class="cta">
+        <a class="btn primary" href="#install">Get started</a>
+        <a class="btn ghost" href="https://github.com/casareanderson/auriga">View source (AGPL-3.0)</a>
+      </div>
+    </div>
+
+    <section id="what">
+      <h2>What it does</h2>
+      <p>
+        Any program that can make an HTTP call can drive the browser. The bridge listens on
+        <code>127.0.0.1</code> only and the extension long-polls it, so nothing is exposed to the
+        network and nothing leaves the machine.
+      </p>
+      <ul class="features">
+        <li>List open tabs with their id, title, url and active state.</li>
+        <li>Navigate, click elements by CSS selector, type into fields, and read page text.</li>
+        <li>Run JavaScript in a page and read back the result.</li>
+        <li>Take PNG screenshots of the active tab.</li>
+        <li>Build an accessibility tree with numeric refs, then click precisely by ref.</li>
+        <li>Click or hover at raw screen coordinates (canvas drawings, unlabelled icons).</li>
+        <li>Upload files into inputs across all frames via the Chrome DevTools Protocol.</li>
+        <li>Capture console output, network responses and failures for debugging.</li>
+        <li>List, read, create and delete cookies for the active tab's origin.</li>
+      </ul>
+    </section>
+
+    <section id="install">
+      <h2>Install</h2>
+      <p>Linux or macOS. The whole thing is local; there is nothing to sign up for.</p>
+      <pre><code># 1. Clone the repository
+git clone https://github.com/casareanderson/auriga &amp;&amp; cd auriga
+
+# 2. Run the setup script (makes scripts executable, creates ~/.auriga/config.json)
+./install.sh
+
+# 3. Load the extension
+#    chrome://extensions → Developer mode → Load unpacked → select the extension/ directory
+
+# 4. Start the bridge (keep it running)
+python3 auriga.py
+
+# 5. Smoke-test it
+./auriga tabs</code></pre>
+      <p>
+        Full instructions, including the optional shared token, audit log and failure alerts, are in
+        the <a href="https://github.com/casareanderson/auriga#readme">README</a>.
+      </p>
+    </section>
+
+    <section id="usage">
+      <h2>Usage</h2>
+      <p>The CLI wraps a plain HTTP API on <code>127.0.0.1:8765</code>:</p>
+      <pre><code>./auriga tabs                                   # list tabs
+./auriga navigate "https://example.com"        # navigate the active tab
+./auriga click "#login-button"                 # click by CSS selector
+./auriga type "input[name=email]" "me@x.com"   # type into a field
+./auriga read                                  # dump the active tab's text
+./auriga eval "document.title"                 # run JS in the page
+./auriga screenshot out.png                    # screenshot the active tab
+./auriga upload "~/Downloads/file.pdf"         # set a file input via CDP
+./auriga snapshot                              # accessibility tree with refs
+./auriga click-ref 12345                       # click by ref from snapshot
+./auriga capture both 5                        # capture console + network for 5s</code></pre>
+      <p>Drive it from anything that can make an HTTP request:</p>
+      <pre><code>curl -s -X POST http://127.0.0.1:8765/command \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"type","selector":"input[name=q]","text":"hello"}'</code></pre>
+    </section>
+
+    <section id="security">
+      <h2>Security model</h2>
+      <p>Auriga's security posture is the point, not an afterthought:</p>
+      <ul class="features">
+        <li><strong>Loopback-only</strong> — the bridge binds <code>127.0.0.1</code>; nothing on the network can reach it.</li>
+        <li><strong>Per-site approval</strong> — nothing runs on a site until you click "Allow" in the popup.</li>
+        <li><strong>CSRF-protected</strong> — a page in another tab cannot talk to the bridge.</li>
+        <li><strong>No cloud, no telemetry</strong> — everything stays on the machine.</li>
+        <li><strong>Local audit log</strong> — secrets (typed text, JS, cookie values) are redacted before they are written.</li>
+      </ul>
+      <div class="callout">
+        <strong>Be careful driving pages that spend money.</strong> The CLI does exactly what you
+        tell it, including clicking checkout and order buttons.
+      </div>
+    </section>
+
+    <section id="roadmap">
+      <h2>Status and roadmap</h2>
+      <p class="small muted">Working today: tabs, navigate, click, type, read, eval, screenshot, cookies,
+      upload (CDP, including iframes), snapshot + click-ref, click-xy / hover, console/network capture,
+      installed-extension listing. In progress: annotated screenshots for vision models, streaming chat /
+      side panel, live remote view. This is an early, honest prototype — some sites resist it.</p>
+    </section>
+  </div>
+
+  <footer>
+    <div class="wrap cols">
+      <div>
+        <strong>Auriga</strong>
+        <p class="small muted">Local, security-first browser control for your own tools and agents.</p>
+      </div>
+      <div>
+        <a href="privacy.html">Privacy Policy</a><br>
+        <a href="terms.html">Terms of Service</a><br>
+        <a href="https://github.com/casareanderson/auriga">GitHub</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
