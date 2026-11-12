@@ -8,7 +8,7 @@ Run it yourself (and keep it running):
 Config: ~/.auriga/config.json (env vars override). Everything stays on this machine; each command
 is written to a local audit log (redacted) and optionally shipped to an Ephor ingest endpoint.
 """
-import json, os, sys, threading, time, uuid, http.server, urllib.parse, urllib.request
+import base64, json, os, sys, threading, time, uuid, http.server, urllib.parse, urllib.request
 
 CONFIG_PATH = os.path.expanduser("~/.auriga/config.json")
 
@@ -51,6 +51,65 @@ _chat_order = []    # FIFO
 _chat_cond = threading.Condition()
 _chat_res = {}      # id -> text
 _chat_res_cond = threading.Condition()
+
+
+class CommandTimeout(Exception):
+    """The extension did not answer a queued command within TIMEOUT seconds."""
+
+
+def live_view_html(token):
+    """Viewer page for GET /live.html: auto-refreshes the live frame every 2s.
+
+    JS setInterval (not <meta refresh>) so only the <img> reloads, with a
+    cache-busting ?t= param; the token (if any) is embedded so the <img> can
+    authenticate — an <img> cannot send an X-Auth-Token header.
+    """
+    token_js = json.dumps(token or "").replace("</", "<\\/")  # safe inside <script>
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Auriga — live view</title>
+<style>
+  body {{ margin: 0; background: #111; color: #ddd; font: 14px/1.45 system-ui, sans-serif; }}
+  header {{ padding: 10px 16px; display: flex; align-items: baseline; gap: 12px; }}
+  h1 {{ font-size: 16px; margin: 0; }}
+  #status {{ font-size: 12px; color: #9c9; }}
+  #status.err {{ color: #d88; }}
+  img#live {{ display: block; width: 100%; max-width: 1280px; margin: 0 auto; border-top: 1px solid #333; }}
+</style>
+</head>
+<body>
+<header>
+  <h1>Auriga — live view</h1>
+  <span id="status">connecting…</span>
+</header>
+<img id="live" alt="Auriga live browser view">
+<script>
+  var img = document.getElementById('live');
+  var status = document.getElementById('status');
+  var TOKEN = {token_js};
+  function liveUrl() {{
+    var u = '/live?t=' + Date.now();
+    if (TOKEN) u += '&token=' + encodeURIComponent(TOKEN);
+    return u;
+  }}
+  img.onload = function () {{
+    status.textContent = 'live — refreshing every 2s';
+    status.classList.remove('err');
+  }};
+  img.onerror = function () {{
+    status.textContent = 'disconnected — extension not polling or site not approved (see Auriga popup)';
+    status.classList.add('err');
+  }};
+  function tick() {{ img.src = liveUrl(); }}
+  tick();
+  setInterval(tick, 2000);
+</script>
+</body>
+</html>
+"""
 
 
 def ship_to_ephor(entry):
@@ -155,6 +214,65 @@ class H(http.server.BaseHTTPRequestHandler):
         o = self.headers.get("Origin")
         return (not o) or o.startswith(EXT_ORIGIN)
 
+    def _run_command(self, action, params):
+        """Enqueue a command and block until the extension replies.
+
+        Shared by POST /command and GET /live so both go through the same queue,
+        poll flow and timeout semantics. Returns (ok, result); raises
+        CommandTimeout after TIMEOUT seconds. Auditing is left to the caller
+        (/live deliberately does not audit per frame).
+        """
+        cid = uuid.uuid4().hex
+        with _cmds_cond:
+            _cmds[cid] = {"id": cid, "action": action, **params}
+            _order.append(cid)
+            _cmds_cond.notify_all()
+        deadline = time.time() + TIMEOUT
+        with _res_cond:
+            while cid not in _res:
+                if time.time() > deadline:
+                    raise CommandTimeout()
+                _res_cond.wait(timeout=1)
+            res = _res.pop(cid)
+        ok = res.get("ok")
+        return ok, (res.get("result") if ok else res.get("error"))
+
+    def _png(self, data):
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def _html(self, page):
+        b = page.encode()
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def _live_error(self, msg):
+        """Non-200 frame response (no-store so the viewer retries and recovers)."""
+        b = json.dumps({"ok": False, "error": msg}).encode()
+        try:
+            self.send_response(502)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -173,6 +291,37 @@ class H(http.server.BaseHTTPRequestHandler):
             connected = time.time() - _last_poll < 60
             self._json({"ok": True, "service": "auriga", "port": PORT,
                         "extension": "connected" if connected else "not polling"})
+            return
+        if p == "/live":
+            if not self._auth():
+                self._json({"ok": False, "error": "unauthorized"}, 401)
+                return
+            try:
+                ok, result = self._run_command("screenshot", {})
+            except CommandTimeout:
+                self._live_error("timeout waiting for extension "
+                                 "(is Chrome open with the Auriga extension loaded?)")
+                return
+            if not ok:
+                self._live_error(str(result))
+                return
+            try:
+                png = base64.b64decode(result.get("dataUrl", "").split(",", 1)[1])
+            except Exception as e:
+                self._live_error("bad screenshot payload: %r" % (e,))
+                return
+            # No audit() per frame: at the viewer's ~2s cadence that would flood
+            # audit.jsonl and ephor with multi-KB dataUrl lines. The live view is
+            # a continuous stream, not a discrete action; /command is unchanged.
+            self._png(png)
+            return
+        if p == "/live.html":
+            if not self._auth():
+                self._json({"ok": False, "error": "unauthorized"}, 401)
+                return
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            tok = q.get("token", [TOKEN])[0] or TOKEN  # ?token= on the page URL overrides config
+            self._html(live_view_html(tok))
             return
         if p == "/poll":
             first = _last_poll == 0.0
@@ -222,23 +371,13 @@ class H(http.server.BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(n) or b"{}")
             action = body.get("action")
             params = {k: v for k, v in body.items() if k != "action"}
-            cid = uuid.uuid4().hex
-            with _cmds_cond:
-                _cmds[cid] = {"id": cid, "action": action, **params}
-                _order.append(cid)
-                _cmds_cond.notify_all()
-            deadline = time.time() + TIMEOUT
-            with _res_cond:
-                while cid not in _res:
-                    if time.time() > deadline:
-                        audit(action, params, False, "timeout waiting for extension")
-                        self._json({"ok": False, "error": "timeout waiting for extension "
-                                    "(is Chrome open with the Auriga extension loaded?)"})
-                        return
-                    _res_cond.wait(timeout=1)
-                res = _res.pop(cid)
-            ok = res.get("ok")
-            result = res.get("result") if ok else res.get("error")
+            try:
+                ok, result = self._run_command(action, params)
+            except CommandTimeout:
+                audit(action, params, False, "timeout waiting for extension")
+                self._json({"ok": False, "error": "timeout waiting for extension "
+                            "(is Chrome open with the Auriga extension loaded?)"})
+                return
             audit(action, params, ok, result)
             self._json({"ok": ok, **({"result": result} if ok else {"error": result})})
             return

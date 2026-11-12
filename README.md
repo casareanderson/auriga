@@ -11,6 +11,7 @@ Drive your own Chrome from any local tool or model — same tabs, same logins �
 - [Screenshots](#screenshots)
 - [Quick start](#quick-start)
 - [Usage](#usage)
+- [Live view](#live-view)
 - [MCP server](#mcp-server-connect-an-llm)
 - [Autostart](#autostart-macos)
 - [Configuration](#configuration)
@@ -26,6 +27,7 @@ Drive your own Chrome from any local tool or model — same tabs, same logins �
 - List open tabs with their id, title, url and active state — `tabs` action, processed in `extension/background.js` line 72 and `auriga` CLI wrapper line 148.
 - Navigate to URLs, click elements by CSS selector, type text into form fields, read page text, and execute arbitrary JavaScript — handled by `content.js` and routed through `sendToTab()` in `background.js`.
 - Generate PNG screenshots of the active tab via `chrome.tabs.captureVisibleTab` — `screenshot` action in `background.js` line 141.
+- Stream a live view of the active tab to any browser — `GET /live` returns one fresh PNG frame, `GET /live.html` is a self-refreshing viewer page (see [Live view](#live-view)).
 - Build an accessibility tree of interactive elements with numeric refs, then click those elements precisely — `snapshot` and `clickRef` in `background.js` lines 243–276.
 - Click or hover at raw screen coordinates for elements without recognisable labels (canvas drawings, icon-only controls) — `clickXY` and `hover` in `background.js` lines 279–292.
 - Upload local files into file input fields across all frames via Chrome DevTools Protocol — `upload` in `background.js` lines 205–241, with frame iteration and change-event firing.
@@ -100,6 +102,24 @@ curl -s -X POST http://127.0.0.1:8765/command \
 ```
 
 All 17 supported actions (`click`, `navigate`, `tabs`, `read`, `eval`, `screenshot`, `snapshot`, `clickRef`, `clickXY`, `hover`, `upload`, `capture`, `extensions`, `approve`, `revoke`, `cookies`, `find`) are listed in the CLI wrapper help (`./auriga`).
+
+## Live view
+
+Watch the active tab from any browser. `GET /live` runs the same command-queue screenshot flow as `./auriga screenshot` and returns the frame as `image/png`; `GET /live.html` is a viewer page that re-fetches it every 2 seconds.
+
+```bash
+curl -s http://127.0.0.1:8765/live -o frame.png   # one fresh frame
+xdg-open http://127.0.0.1:8765/live.html          # auto-refreshing viewer
+```
+
+The viewer refreshes only the image via a small JS `setInterval` (no whole-page reloads), with a `?t=` cache-busting query param plus `Cache-Control: no-store` on the frame — the browser never shows a stale frame. Frames are served exactly as the extension captures them (PNG, no re-encode, stdlib only). If the extension is not polling or the active tab's site is not approved, the viewer shows a "disconnected" message instead of a broken-image icon.
+
+Notes:
+
+- Like every gated action, screenshots only work for approved origins. The live view follows the active tab, so approve a site in the Auriga popup (or `./auriga approve <url>`) before — or while — watching it; navigating to a new, unapproved site pauses the stream until approved.
+- If a token is configured (`AURIGA_TOKEN`), pass it as `?token=…` on the endpoint and the viewer page (`…/live.html?token=…`); the page embeds it in each frame request (an `<img>` cannot send the `X-Auth-Token` header).
+- Live frames are **not** written to the audit log or shipped to Ephor — the stream is a continuous view, not a discrete action, so it is exempt from per-command audit. `/command` audit behaviour is unchanged.
+- Access through the reverse SSH tunnel (`tunnel.sh`) works as-is: the tunnel already exposes `127.0.0.1:8765`.
 
 ## MCP server (connect an LLM)
 
@@ -179,7 +199,7 @@ Site authorisation is per-origin in the extension's storage (`chrome.storage.loc
 Three components communicate over localhost:
 
 1. **CLI wrapper** (`auriga`) — a thin Python script that auto-starts the bridge if needed, sends commands as JSON to the HTTP endpoint, and pretty-prints results.
-2. **Bridge** (`auriga.py`) — a stdlib-only `http.server.ThreadingHTTPServer` bound to `127.0.0.1`. It accepts commands via `POST /command`, queues them internally, blocks until the extension replies, writes a redacted entry to the local audit log, optionally ships to Ephor, and posts failure tickets to a configured webhook. The extension connects via `GET /poll` (long-poll).
+2. **Bridge** (`auriga.py`) — a stdlib-only `http.server.ThreadingHTTPServer` bound to `127.0.0.1`. It accepts commands via `POST /command`, queues them internally, blocks until the extension replies, writes a redacted entry to the local audit log, optionally ships to Ephor, and posts failure tickets to a configured webhook. `GET /live` and `GET /live.html` serve a live view of the active tab through the same queue (see [Live view](#live-view)). The extension connects via `GET /poll` (long-poll).
 3. **Chrome extension** — a Manifest V3 service worker (`background.js`) that polls `/poll`, dispatches commands using the Chrome Extension APIs (`chrome.tabs`, `chrome.cookies`, `chrome.scripting`, `chrome.storage`) and Chrome DevTools Protocol (`chrome.debugger`), then posts the result back to `POST /result`. Content scripts run on every page and handle element-level actions (click, type, read).
 
 ```mermaid
@@ -223,7 +243,6 @@ Known gaps:
 
 - No annotated screenshots (numbered element overlays for vision-model input) — tracked in the roadmap.
 - No streaming side panel or chat interface for iterative browsing.
-- No live remote view capability (screen stream to a remote dashboard).
 
 ## Roadmap
 
@@ -238,7 +257,7 @@ Known gaps:
 | Installed-extension inspector | Done |
 | Annotated screenshots for vision models | In progress |
 | Streaming chat / side panel | Planned |
-| Live remote view (screenshot stream) | Planned |
+| Live remote view (screenshot stream) | Done |
 
 ## Safety
 
