@@ -260,3 +260,7 @@ Known gaps:
 ## Licence
 
 Auriga is licensed under the GNU Affero General Public License v3.0. See `LICENSE` for the full text.
+
+---
+
+More homelab field notes: https://iamtech.cn1-lab.uk
