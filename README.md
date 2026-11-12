@@ -11,11 +11,14 @@ Drive your own Chrome from any local tool or model — same tabs, same logins �
 - [Screenshots](#screenshots)
 - [Quick start](#quick-start)
 - [Usage](#usage)
+- [MCP server](#mcp-server-connect-an-llm)
+- [Autostart](#autostart-macos)
 - [Configuration](#configuration)
 - [How it works](#how-it-works)
 - [Status and limits](#status-and-limits)
 - [Roadmap](#roadmap)
 - [Safety](#safety)
+- [Troubleshooting](#troubleshooting)
 - [Licence](#licence)
 
 ## What it does
@@ -56,8 +59,8 @@ git clone https://github.com/casareanderson/auriga && cd auriga
 # 3. Load the Chrome extension
 #    chrome://extensions → Developer mode → Load unpacked → select the extension/ directory
 
-# 4. Start the bridge
-python3 auriga.py
+# 4. Start the bridge (on macOS it's already running as a launchd agent — see Autostart below)
+./auriga start
 
 # 5. Test it works
 ./auriga tabs
@@ -97,6 +100,57 @@ curl -s -X POST http://127.0.0.1:8765/command \
 ```
 
 All 17 supported actions (`click`, `navigate`, `tabs`, `read`, `eval`, `screenshot`, `snapshot`, `clickRef`, `clickXY`, `hover`, `upload`, `capture`, `extensions`, `approve`, `revoke`, `cookies`, `find`) are listed in the CLI wrapper help (`./auriga`).
+
+## MCP server (connect an LLM)
+
+Give a model the browser as a set of tools. `mcp_server.py` is a stdlib-only
+Model Context Protocol server that wraps the bridge's HTTP API, so any MCP client
+(Claude Desktop, OpenCode, Hermes, a local model) can drive the browser through
+the same actions as the CLI: `auriga_tabs`, `auriga_navigate`, `auriga_click`,
+`auriga_click_text`, `auriga_find`, `auriga_type`, `auriga_read`, `auriga_eval`,
+`auriga_screenshot`, `auriga_snapshot`, `auriga_click_ref`, `auriga_click_xy`,
+`auriga_hover`, `auriga_capture`, `auriga_cookies`, `auriga_extensions`,
+`auriga_approve`, `auriga_revoke`.
+
+The extension's per-site approval still gates every action — a model cannot act
+on a site until you click "Allow" in the popup (or `./auriga approve <url>`).
+
+```bash
+# run it manually (stdio transport)
+python3 mcp_server.py
+
+# or point it at a bridge elsewhere / with a token
+AURIGA_URL=http://127.0.0.1:8765 AURIGA_TOKEN=... python3 mcp_server.py
+```
+
+Register it in your client, e.g. Claude Desktop
+(`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "auriga": {
+      "command": "python3",
+      "args": ["/absolute/path/to/auriga/mcp_server.py"],
+      "env": { "AURIGA_URL": "http://127.0.0.1:8765" }
+    }
+  }
+}
+```
+
+## Autostart (macOS)
+
+`install.sh` registers the bridge as a launchd agent (`com.c1lab.auriga.bridge`),
+so it starts on login and is kept alive — no manual `./auriga start` after a
+reboot. The reverse tunnel (`com.c1lab.auriga.tunnel`) is registered the same way.
+
+- Log: `/tmp/auriga-bridge.log`
+- Restart: `launchctl unload ~/Library/LaunchAgents/com.c1lab.auriga.bridge.plist && launchctl load ~/Library/LaunchAgents/com.c1lab.auriga.bridge.plist`
+- On Linux there is no agent yet: run `./auriga start` after login, or write your own `systemd --user` unit.
+
+The extension side self-heals on its own: it long-polls the bridge, and a
+`chrome.alarms` ping every 30s re-wakes the service worker after a browser
+restart or crash, then reconnects with a 2s retry.
 
 ## Configuration
 
@@ -145,6 +199,7 @@ graph LR
 auriga/
 ├── auriga            CLI wrapper (Python)
 ├── auriga.py         Local HTTP bridge (stdlib only)
+├── mcp_server.py     MCP server (connect an LLM)
 ├── install.sh        One-time setup script
 ├── tunnel.sh         Reverse SSH tunnel helper
 ├── test_bridge.py    End-to-end bridge test (no browser)
@@ -192,6 +247,15 @@ Known gaps:
 - Gated actions require per-origin approval through the extension popup before they execute.
 - Typed text, evaluated JavaScript and cookie values are redacted in the audit log.
 - The bridge monitors the extension connection; if the browser closes or the service worker dies, a failure ticket fires after 120 seconds.
+
+## Troubleshooting
+
+- **"site not approved"** — gated actions need per-origin approval. Open the Auriga popup and click Allow, or run `./auriga approve <url>`.
+- **`./auriga status` says "bridge: NOT running"** — macOS: `launchctl load ~/Library/LaunchAgents/com.c1lab.auriga.bridge.plist`; otherwise `./auriga start`.
+- **"extension: not polling"** — bridge is up but the extension isn't connected. Reload the extension once in `chrome://extensions`; it reconnects on the next poll.
+- **Nothing responds after a browser restart** — the 30s alarm re-wakes the worker automatically; wait up to ~30s, or open the popup once.
+- **After editing the extension code** — Chrome keeps the old service worker until you click Reload on `chrome://extensions`.
+- **Port already in use** — another bridge is running: `./auriga stop`, or `lsof -ti :8765 | xargs kill`.
 
 ## Licence
 
