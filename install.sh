@@ -23,8 +23,13 @@ CFG
 fi
 chmod 600 "$HOME/.auriga/config.json"
 
-# Start the bridge in the background — it just sits and waits for the extension.
-"$HERE/auriga" start || true
+# Start the bridge. On macOS a launchd agent (installed below) starts it on
+# login and keeps it alive; on Linux it runs in the background for this session.
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  :
+else
+  "$HERE/auriga" start || true
+fi
 
 # Install the reverse-tunnel launchd agent (auto-connects + survives sleep) on macOS.
 if [[ "$(uname -s)" == "Darwin" ]]; then
@@ -45,6 +50,23 @@ PLIST
   launchctl unload "$HOME/Library/LaunchAgents/com.c1lab.auriga.tunnel.plist" 2>/dev/null || true
   launchctl load "$HOME/Library/LaunchAgents/com.c1lab.auriga.tunnel.plist"
   echo "Installed the reverse tunnel as a launchd agent (auto-reconnects, survives sleep)."
+  cat > "$HOME/Library/LaunchAgents/com.c1lab.auriga.bridge.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.c1lab.auriga.bridge</string>
+  <key>ProgramArguments</key>
+  <array><string>/usr/bin/python3</string><string>$HERE/auriga.py</string></array>
+  <key>WorkingDirectory</key><string>$HERE</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/tmp/auriga-bridge.log</string>
+  <key>StandardErrorPath</key><string>/tmp/auriga-bridge.log</string>
+</dict></plist>
+PLIST
+  launchctl unload "$HOME/Library/LaunchAgents/com.c1lab.auriga.bridge.plist" 2>/dev/null || true
+  launchctl load "$HOME/Library/LaunchAgents/com.c1lab.auriga.bridge.plist"
+  echo "Installed the bridge as a launchd agent (starts on login, kept alive)."
 fi
 
 echo
